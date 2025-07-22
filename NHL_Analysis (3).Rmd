@@ -1,0 +1,182 @@
+---
+title: "Project 1: NHL"
+author: "Brady Biehn, Ethan Hufendick, Marvin Omana Palma"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(tidyverse)
+library(flextable)
+library(knitr)
+```
+
+
+```{r}
+# reads in NHL dataset for 2001-2002 season, skipping first row
+nhl_2001_2002 = read_csv("https://homepages.gac.edu/~anienow2/MCS_240/23Spring/Projects/Project1/2001_2002_NHL.csv", skip = 1)
+
+# reads in NHL dataset for 2021-2022 season, skipping first row
+nhl_2021_2022 = read_csv("https://homepages.gac.edu/~anienow2/MCS_240/23Spring/Projects/Project1/2021_2022_NHL.csv", skip = 1)
+```
+
+```{r}
+nhl_2001_2002_clean = nhl_2001_2002 %>% 
+  # selects columns needed for analysis
+  select(Team, `PP%`, GP, GF, `GF/G`, S, W, L, `PIM/G`, `SV%`) %>%
+  # removes "*" from team names and adds the respective season
+  mutate(Team = gsub("\\*$", "", Team), season = "2001-2002")
+
+nhl_2021_2022_clean = nhl_2021_2022 %>%
+  # selects columns needed for analysis
+  select(Team, `PP%`, GP, GF, `GF/G`, S, W, L, `PIM/G`, `SV%`) %>%
+  # removes "*" from team names and adds the respective season
+  mutate(Team = gsub("\\*$", "", Team), season = "2021-2022")
+```
+
+**4. Clean Dataset**
+```{r}
+# joins the clean datasets from the 2001-2002 season and the 
+# 2021-2022 season into a new nhl dataset
+nhl = nhl_2001_2002_clean %>%
+  full_join(nhl_2021_2022_clean)
+
+nhl<-nhl%>%mutate(Std_Pts=(2*W+(GP-(W+L))))
+#creating total points variable for each team and league average
+glimpse(nhl)
+```
+
+```{r}
+# summary statistics for PP% by season
+nhl %>%filter(Team!="League Average")%>%mutate(Season=season)%>%
+  #filtering out league average rows and changing season for the table
+  group_by(Season) %>% 
+  summarize(Min = min(`PP%`, na.rm = T), 
+                  Q1 = quantile(`PP%`, prob = .25, na.rm = T), 
+                  Median = median(`PP%`, na.rm = T), 
+                  Q3 = quantile(`PP%`, prob = .75, na.rm = T), 
+                  Max = max(`PP%`, na.rm = T),
+                  Mean = round(mean(`PP%`, na.rm = T),2),
+                  SD = round(sd(`PP%`, na.rm = T),2),
+                  n = n()
+                  )
+```
+
+```{r}
+# side by side box plots of pp% by season 
+nhl %>%
+  ggplot(aes(x=season, y = `PP%`)) +
+  geom_boxplot() +
+  labs(x="Season",
+       y = "Power Play Conversion %",
+       fill = "Season",
+       title = "Teams Power Play Conversion % by Season",
+       caption="Figure 4: Side-by-side box plots of team power play conversion % by team, which
+               measures the rate at which teams scored while on a power play") + 
+  theme_bw(base_size = 20) + 
+  #creating visually basic plot but larger base to make it easier to read
+  theme(plot.title = element_text(hjust = 0.5, size = 14),
+        plot.caption = element_text(hjust = 0, size = 11),
+        axis.title.y = element_text(size=14))
+ #Changing size and location of labels, by centering and making letters larger
+```
+
+```{r}
+# summary statistics of save percentages by season
+nhl %>%filter(Team!="League Average")%>%
+  group_by(season) %>% rename(Season=season)%>%
+  summarize(Min = min(`SV%`, na.rm = T), 
+                  Q1 = round(quantile(`SV%`, prob = .25, na.rm = T),3), 
+                  Median = round(median(`SV%`, na.rm = T),3), 
+                  Q3 = round(quantile(`SV%`, prob = .75, na.rm = T),3), 
+                  Max = max(`SV%`, na.rm = T),
+                  Mean = round(mean(`SV%`, na.rm = T),3),
+                  SD = round(sd(`SV%`, na.rm = T),3),
+                  n = n()
+                  ) #%>%
+  #flextable::flextable() %>%    # convert to pretty image
+  #flextable::autofit()%>% add_header_lines(values="Save Percentages by Season", top=TRUE)%>%align(align = c("center"),part = "header") #creating and aligning header
+```
+
+```{r}
+#Total shots
+nhl%>%filter(Team=="League Average")%>%mutate(Season=season)%>%mutate(SpG=round(S/GP,2))%>%
+  #creating variable for shots per game for just the league averages
+  ggplot(aes(x=Team, y=SpG, fill=Season))+
+  geom_bar(stat = "identity", position = position_dodge(width = 1))+
+  #adding space in between bars
+  scale_fill_manual(values = c("black", "gold"))+#filling bar colors
+  geom_text(aes(label=SpG), color=c("gold","black"), fontface = "bold", vjust = 1.5,
+             position = position_dodge(1), size = 5)+
+  #adding colored value labels on top of the bars
+  labs(x="Season League Average", y="Total Shots", title="Average Number of Total Shots for per Game by Season", caption = "Figure 1: The 2001-02 season league average number of total shots for per game compared 
+  to the 2021-22 season league average number of total shots for per game")+
+  #creating axis and title labels
+  theme_bw(base_size = 20)+
+    theme(axis.text.x=element_blank(),
+        legend.position = "none",
+        plot.caption = element_text(hjust = 0.5, size = 11),
+        plot.title = element_text(hjust=0.5,size = 14))#cleaning title, axis, and caption visual
+
+#GF per game
+nhl%>%filter(Team=="League Average")%>%mutate(Season=season)%>%mutate(GFpGame=round(GF/GP,2))%>%
+  #creating variable goals for per game for league average for each season
+  ggplot(aes(x=Team, y=GFpGame, fill=Season))+
+  geom_bar(stat = "identity", position = position_dodge(width = 1))+
+  #adding space in between bars
+  scale_fill_manual(values = c("black", "gold"))+ #filling bar colors
+  geom_text(aes(label=GFpGame), color=c("gold","black"), fontface = "bold", vjust = 1.5,
+             position = position_dodge(1), size = 5)+ 
+  #adding colored value labels on top of bars
+  labs(x="Season League Average", y="Goals for per Game", title="Average Total Goals for per Game by Season", caption = "Figure 2: The 2001-02 season league average number of goals for per game compared  
+                to the 2021-22 season league average number of goals for per game")+ 
+  #creating axis and title labels
+  theme_bw(base_size = 20)+
+    theme(plot.title = element_text(hjust = 0.5, size = 14),
+        axis.text.x=element_blank(),
+        plot.caption = element_text(hjust = 0, size = 11)) 
+#cleaning title, axis, and caption visual
+
+
+
+```
+
+```{r,tab.topcaption=FALSE}
+#Competitive balance measure by season
+la<- nhl%>%filter(Team=="League Average")
+#creating subset of just league averages
+nhl%>%filter(Team!="League Average")%>%group_by(season)%>% rename(Season=season) %>%
+  #filtering out league average, so it's only the teams
+  summarise(Actual=round(sd(Std_Pts),2),
+            #actual st. dev for teams
+            Idealized=round(mean(la$Std_Pts)/sqrt(82),2), 
+            #idealized st. dev based on league averages
+            "Noll-Scully"= round(Actual/Idealized,2)) #%>% 
+  #creating noll scully metric
+  #flextable::flextable() %>%    # convert to pretty image
+  #flextable::autofit()%>% add_header_lines(values="Competitive Balance Measure by Season", top=TRUE)%>%align(align = c("center"),part = "header")
+#adding title and aligning header of table
+```
+
+
+
+```{r}
+#Peanlty minutes per game
+nhl %>%
+  filter(season != "League Average") %>%
+  group_by(season) %>%
+  ggplot(aes(x=season, y=`PIM/G`)) + 
+  geom_violin(trim=FALSE) + 
+  stat_summary(fun=median, geom="point", size=2, color="black") +
+  geom_boxplot(width=0.1) +
+  labs(title = "Team Penalty Minutes per Game by Season",
+    x="Season", 
+       y="Penalty Minutes per Game", caption = "Figure 3: Side-by-side violin plots of the distribution of penalty minutes per game 
+                for each team for the 2001-02 and 2021-22 seasons")+
+  theme_bw(base_size = 20)+
+    theme(plot.title = element_text(hjust = 0.5, size = 14),
+        plot.caption = element_text(hjust = 0, size = 11),
+        axis.title.y = element_text(size=14))
+nhl%>%group_by(season)%>%summarise(mean(`PIM/G`), max(`PIM/G`), median(`PIM/G`))
+```
+
